@@ -15,5 +15,13 @@ USER ${NB_UID}
 COPY requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/requirements.txt
 
-# Start Jupyter
-CMD ["start-notebook.py"]
+
+# Same env values as your docker run
+ENV JUPYTER_TOKEN=devtoken \
+    JUPYTER_PASSWORD=
+
+# Jupyter listens on 8888 in the container
+EXPOSE 8888
+
+# Start exactly like your command
+CMD ["start-notebook.py", "--ServerApp.token=devtoken", "--ServerApp.password=", "--debug"]

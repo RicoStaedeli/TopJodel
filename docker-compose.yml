@@ -70,9 +70,11 @@ services:
     restart: unless-stopped
     env_file: .env
     ports:
-      - "8888:8888"
+      - "9999:8888"
     environment:
       # Pass DB connection details into the notebook
+      JUPYTER_TOKEN: ${JUPYTER_TOKEN}
+
       PGHOST: postgres
       PGPORT: ${PGPORT}
       PGUSER: ${POSTGRES_USER}
@@ -87,8 +89,6 @@ services:
       NEO4J_URI: ${APP_NEO4J_URI}
       NEO4J_USER: ${APP_NEO4J_USER}
       NEO4J_PASSWORD: ${APP_NEO4J_PASSWORD}
-
-      JUPYTER_TOKEN: ${JUPYTER_TOKEN}
     volumes:
       - ./notebooks:/home/jovyan/work
     depends_on:
