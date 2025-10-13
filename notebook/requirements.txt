@@ -1,0 +1,6 @@
+psycopg2-binary==2.9.9
+pymongo==4.7.2
+neo4j==5.23.0
+pandas==2.2.2
+sqlalchemy==2.0.32
+ipywidgets==8.1.3
