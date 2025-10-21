@@ -1,4 +1,4 @@
-# TopJodel - Advanced Databases Projec
+# TopJodel - Advanced Databases Project
 
 This is a minimal social media backend project for a database class. It spins up PostgreSQL, MongoDB and Neo4j as docker containers.
 
