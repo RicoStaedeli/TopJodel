@@ -15,6 +15,10 @@ docker compose build
 docker compose up -d
 ```
 
+```bash
+  docker compose up -d
+```
+
 To stop and remove containers:
 ```bash
 docker compose down
