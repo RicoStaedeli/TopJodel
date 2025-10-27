@@ -60,6 +60,11 @@ def seed_likes():
 
     ensure_indexes(db)
 
+    like_count = likes.count_documents({})
+    if like_count > 0:
+        print(f"ℹ️  Database already has {like_count} likes — skipping seeding.")
+        return
+
     # Stream post ids to avoid loading everything in memory
     cursor = posts.find({}, {"_id": 1})
     ops: List[UpdateOne] = []
