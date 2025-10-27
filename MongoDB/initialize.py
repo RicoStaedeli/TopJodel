@@ -25,114 +25,81 @@ MAX_LIKES_PER_POST = 120       # hard cap just in case
 BATCH_SIZE = 5000              # bulk write batch size
 
 
-def heavy_tailed_like_count(avg: int, max_cap: int) -> int:
+def _heavy_tailed_like_count(avg: int, max_cap: int) -> int:
     """
     Draw a like count with a heavy tail so a few posts are popular.
     Pareto with alpha ~ 2 gives a reasonable skew.
     """
-    # Base around avg with randomness
     base = max(0, int(random.paretovariate(2.0) * (avg / 2)))
     return min(max_cap, base)
 
-
-def rand_users_for_post(k: int) -> List[int]:
+def _rand_users_for_post(k: int) -> List[int]:
     """
     Draw k unique user_ids in [MIN_USER_ID, MAX_USER_ID].
-    If k > number of users, we cap to number of users.
+    If k > number of users, cap to number of users.
     """
     k = min(k, MAX_USER_ID - MIN_USER_ID + 1)
     return random.sample(range(MIN_USER_ID, MAX_USER_ID + 1), k)
 
-
-def ensure_indexes(db):
-    posts = db[POSTS_COLL]
-    likes = db[LIKES_COLL]
-    posts.create_index([("created_at", ASCENDING)])
-    posts.create_index([("user_id", ASCENDING)])
-    likes.create_index([("post_id", ASCENDING), ("user_id", ASCENDING)], unique=True)
-    likes.create_index([("post_id", ASCENDING)])
-
-
 def seed_likes():
+    """
+    Seed likes by calling the repository's add_like, not by writing directly.
+    This keeps the posts.likes counter in sync and uses the unique index on (post_id, user_id).
+    """
     client = get_mongo_client()
     db = client[DB_NAME]
-    posts = db[POSTS_COLL]
-    likes = db[LIKES_COLL]
 
-    ensure_indexes(db)
+    repo = MongoPostsRepository(db)  # ensures indexes on posts and post_likes
 
-    like_count = likes.count_documents({})
-    if like_count > 0:
-        print(f"Database already has {like_count} likes — skipping seeding.")
+    existing_like_count = repo.likes.estimated_document_count()
+    if existing_like_count > 0:
+        print(f"Database already has {existing_like_count} likes, skipping seeding.")
         return
 
     # Stream post ids to avoid loading everything in memory
-    cursor = posts.find({}, {"_id": 1})
-    ops: List[UpdateOne] = []
+    cursor = repo.posts.find({}, {"_id": 1})
+
     total_planned = 0
+    total_created = 0
 
     for doc in cursor:
-        post_id = doc["_id"]
+        post_oid = doc["_id"]
+        post_id = str(post_oid)
 
         # Decide how many users like this post
-        k = heavy_tailed_like_count(AVG_LIKES_PER_POST, MAX_LIKES_PER_POST)
+        k = _heavy_tailed_like_count(AVG_LIKES_PER_POST, MAX_LIKES_PER_POST)
         if k <= 0:
             continue
 
-        for uid in rand_users_for_post(k):
-            # Upsert makes this idempotent
-            ops.append(
-                UpdateOne(
-                    {"post_id": post_id, "user_id": uid},
-                    {"$setOnInsert": {"post_id": post_id, "user_id": uid, "created_at": datetime.now(timezone.utc)}},
-                    upsert=True,
-                )
-            )
+        planned_uids = _rand_users_for_post(k)
         total_planned += k
 
-        # Flush in batches
-        if len(ops) >= BATCH_SIZE:
-            _flush(likes, ops)
+        created_for_post = 0
+        for uid in planned_uids:
+            # add_like returns True only when it actually created the like
+            if repo.add_like(post_id, uid):
+                created_for_post += 1
+                total_created += 1
 
-    # Final flush
-    if ops:
-        _flush(likes, ops)
+    print(f"Prepared ~{total_planned} likes, actually created {total_created}. Duplicates were skipped by add_like.")
 
-    print(f"Prepared ~{total_planned} likes (duplicates skipped via upsert).")
-
-    # Sync the denormalized counter on posts
+    # Safety pass to ensure counters match reality if any drift occurred
+    # This is optional since add_like already increments posts.likes.
     sync_like_counters(db)
     print("Like counters synced to posts.likes.")
-
-
-def _flush(likes_coll, ops: List[UpdateOne]):
-    try:
-        res = likes_coll.bulk_write(ops, ordered=False)
-        inserted = (res.upserted_count or 0) + (res.inserted_count or 0)
-        print(f"bulk_write: upserted or inserted {inserted}, matched {res.matched_count}")
-    except BulkWriteError as e:
-        # Upserts can still race, but ordered=False keeps it fast
-        details = e.details or {}
-        n = details.get("nInserted", 0)
-        print(f"bulk_write completed with duplicates, inserted {n}")
-    finally:
-        ops.clear()
-
 
 def sync_like_counters(db):
     """
     Server-side aggregation to count likes per post, then write the number to posts.likes.
-    Requires MongoDB 4.2+.
+    Works with MongoDB 4.2+.
     """
     pipeline = [
         {"$group": {"_id": "$post_id", "count": {"$sum": 1}}},
         {
             "$merge": {
-                "into": {"db": DB_NAME, "coll": POSTS_COLL},
+                "into": {"db": db.name, "coll": "posts"},
                 "on": "_id",
-                "whenMatched": [
-                    {"$set": {"likes": "$$new.count"}}
-                ],
+                "whenMatched": [{"$set": {"likes": "$$new.count"}}],
                 "whenNotMatched": "discard",
             }
         },
