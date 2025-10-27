@@ -63,7 +63,7 @@ def seed_likes():
 
     like_count = likes.count_documents({})
     if like_count > 0:
-        print(f"ℹ️  Database already has {like_count} likes — skipping seeding.")
+        print(f"Database already has {like_count} likes — skipping seeding.")
         return
 
     # Stream post ids to avoid loading everything in memory
