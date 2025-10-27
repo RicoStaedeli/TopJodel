@@ -237,3 +237,11 @@ class MongoPostsRepository:
         if not doc:
             raise PostNotFound(f"post {post_id} not found")
         return Post.from_doc(doc)
+
+    def db_initialized(self) -> bool:
+        """
+        Check if the posts collection has any documents.
+        :return: True if there is at least one post, False otherwise.
+        """
+        count = self.posts.estimated_document_count()
+        return count > 0

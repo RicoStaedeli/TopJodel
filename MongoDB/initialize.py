@@ -9,6 +9,7 @@ from pymongo import UpdateOne, ASCENDING
 from pymongo.errors import BulkWriteError
 
 from MongoDB.connection import get_mongo_client
+from MongoDB.mongo_posts import MongoPostsRepository
 
 DB_NAME = "appdb"
 POSTS_COLL = "posts"
@@ -139,29 +140,38 @@ def sync_like_counters(db):
     db[LIKES_COLL].aggregate(pipeline, allowDiskUse=True)
 
 def initialize_posts_col():
-    """Initialize MongoDB with seed data from a JSON file."""
+    """Initialize MongoDB with seed data from a JSON file using PostRepository.create_post()."""
     FILE_PATH = "MongoDB/import/init_posts.json"  # mounted path
 
     client = get_mongo_client()
     db = client[DB_NAME]
-    posts = db[POSTS_COLL]
+    repo = MongoPostsRepository(db)
+
 
     # Skip import if posts already exist
-    existing_count = posts.count_documents({})
-    if existing_count > 0:
-        print(f"ℹ️  Database already has {existing_count} posts — skipping import.")
+    db_initialized = repo.db_initialized()
+    if db_initialized :
+        print(f"Database already initialized — skipping import.")
         return
 
-    # Read JSON
+    # Load JSON
     with open(FILE_PATH, "r", encoding="utf-8") as f:
         data = json.load(f)
 
-    print(f"📦 Loading {len(data)} posts from {FILE_PATH}...")
-    try:
-        result = posts.insert_many(data, ordered=False)
-        print(f"Inserted {len(result.inserted_ids)} posts into '{DB_NAME}.{POSTS_COLL}'")
-    except BulkWriteError as e:
-        inserted = e.details.get("nInserted", 0)
-        print(f"Warning: Inserted {inserted} posts before duplicate error.")
-    except Exception as e:
-        print(f"Error: Import failed: {e}")
+
+    print(f"Loading {len(data)} posts from {FILE_PATH}...")
+    inserted_count = 0
+
+    for post in data:
+        try:
+            repo.create_post(
+                user_id=post["user_id"],
+                title=post["title"],
+                text=post["text"],
+                topics=post.get("topics", []),
+            )
+            inserted_count += 1
+        except Exception as e:
+            print(f"Skipping post '{post.get('title', 'unknown')}' — error: {e}")
+
+    print(f"Inserted {inserted_count} posts into '{DB_NAME}.{POSTS_COLL}'")
