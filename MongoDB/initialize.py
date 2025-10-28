@@ -9,7 +9,7 @@ from pymongo import UpdateOne, ASCENDING
 from pymongo.errors import BulkWriteError
 
 from MongoDB.connection import get_mongo_client
-from MongoDB.mongo_posts import MongoPostsRepository
+from MongoDB.mongo_repo import MongoPostsRepository
 
 DB_NAME = "appdb"
 POSTS_COLL = "posts"
