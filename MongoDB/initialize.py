@@ -41,7 +41,7 @@ def _rand_users_for_post(k: int) -> List[int]:
     k = min(k, MAX_USER_ID - MIN_USER_ID + 1)
     return random.sample(range(MIN_USER_ID, MAX_USER_ID + 1), k)
 
-def seed_likes():
+def initialize_likes():
     """
     Seed likes by calling the repository's add_like, not by writing directly.
     This keeps the posts.likes counter in sync and uses the unique index on (post_id, user_id).

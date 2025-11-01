@@ -220,3 +220,41 @@ def delete_user(user_id, token, email, password):
         raise UserError("❌ Failed to delete user: Database error") from e
     except TokenError as e:
         raise UserError(f"❌ Failed to delete user: {e}") from e
+
+
+def retrieve_all_users():
+    """
+    Retrieve all users' IDs and names.
+
+    Name resolution priority:
+      1) "first_name last_name" (trimmed), if available
+      2) username
+
+    Returns:
+        List[Dict[str, Any]]: [{"id": <int>, "name": <str>}, ...]
+    """
+    try:
+        with connect_to_sql_database() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT
+                        u.id,
+                        COALESCE(
+                            NULLIF(TRIM(COALESCE(p.first_name, '') || ' ' || COALESCE(p.last_name, '')), ''),
+                            p.username
+                        ) AS name
+                    FROM users u
+                    LEFT JOIN profile p ON p.user_id = u.id
+                    ORDER BY u.id;
+                """)
+                rows = cur.fetchall()
+
+                users = [{"id": row[0], "name": row[1]} for row in rows]
+                print(f"✅ Retrieved {len(users)} users")
+                return users
+
+    except psycopg2.Error as e:
+        raise UserError("❌ Failed to fetch users: Database error") from e
+    except Exception as e:
+        print(f"❌ Failed to fetch users: {e}")
+        raise
