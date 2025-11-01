@@ -1,4 +1,4 @@
-from connection import connect_to_sql_database
+from .connection import connect_to_sql_database
 import psycopg2
 
 class CreationError(Exception):
